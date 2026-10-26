@@ -281,6 +281,10 @@ export function validateProject(p) {
   }
   for(const s of p.sessions) {
     if(!s.chapter||typeof s.chapter.text!=='string'||typeof s.chapter.id!=='string'||!Array.isArray(s.findings)) throw new Error('备份检查记录无效。');
+    if(s.ai){
+      const c=s.ai.coverage,u=s.ai.usage,n=v=>Number.isSafeInteger(v)&&v>=0;
+      if(!c||!u||s.ai.provider!=='DeepSeek'||!['deepseek-flash','deepseek-v4-pro'].includes(s.ai.model)||!['totalChapters','totalChars','selectedChapters','selectedChars'].every(k=>n(c[k]))||c.selectedChars>c.totalChars||c.selectedChapters>c.totalChapters||typeof c.fullBook!=='boolean'||!['inputTokens','outputTokens','totalTokens'].every(k=>u[k]===null||n(u[k]))||!n(s.ai.rejected))throw new Error('备份 AI 审稿信息无效。');
+    }
     for(const f of s.findings) {
       if(!['pending','error','change','ignore'].includes(f.status)||!validateEvidence([s.chapter],f.evidence)||!validateEvidence(p.chapters,f.previousEvidence)) throw new Error('备份检查记录的引用无效。');
     }

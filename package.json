@@ -1,7 +1,7 @@
 {
   "name": "zhangxu-continuity",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/*.test.mjs", "check": "node scripts/check.mjs" }
+  "scripts": { "start": "node --env-file-if-exists=.env server.mjs", "test": "node --test tests/*.test.mjs", "check": "node scripts/check.mjs" }
 }
