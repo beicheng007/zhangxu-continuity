@@ -38,6 +38,17 @@ const state={projects:[],project:null,page:'library',factTab:'pending',query:'',
 let saveTimer,toastTimer,saveQueue=Promise.resolve(),worker,taskNo=0;
 // Credentials stay in this tab's memory. Never attach them to a project/backup.
 let aiKey='',aiModel='deepseek-flash',aiPending=null,aiAbort=null;
+const REVIEW_AREAS=[
+  {name:'人物基础设定',detail:'年龄、惯用手、瞳色、血型、出生地等是否前后一致。',example:'前文惯用左手，新章却写成惯用右手。'},
+  {name:'关系与身份',detail:'父母关系、别名、所属阵营与身份描述是否对应。',example:'同一人物的生父在前后章节中变成两个人。'},
+  {name:'能力与身体状态',detail:'人物已有的能力、伤病与新章动作是否相容。',example:'前文双目失明，新章看清远处旗号，却未交代康复。'},
+  {name:'物品状态与归属',detail:'物品交给了谁、是否丢失或毁坏，后续使用是否衔接。',example:'已经熔毁的原钥匙再次出现，且没有重铸解释。'},
+  {name:'关键数值',detail:'固定编制、长度等已明确的数值与单位是否对得上。',example:'固定编制从三百人变成五百人，需核对是否调整了设定。'},
+  {name:'地点与事件衔接',detail:'地点描述、事件先后和因果是否出现前后冲突线索。',example:'新章把前文尚未完成的事件当作已经完成，需核对叙述时间。'},
+];
+const REVIEW_BOUNDARY='当前聚焦前后文一致性；暂不提供错别字校对、文笔打分、商业潜力评估、抄袭或版权鉴定、发布合规审核。';
+const REVIEW_RULE_CRITERIA='对同一对象、同一属性做规范化比较；稳定属性不同标为明确属性差异，年龄、阵营、生死状态或带语境线索的差异交由作者判断。';
+const REVIEW_AI_CRITERIA='只比较本轮材料，先核对对象、时间与语境，排除已有解释的正常变化；两处描述难以同时成立时提出疑点，时间或指代不确定时说明限制。';
 const tasks=new Map();
 try {
   worker=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
@@ -110,6 +121,30 @@ function steps(index) {
   return `<nav class="steps" aria-label="使用流程">${['导入旧稿','确认设定','检查新章','保留判断'].map((x,i)=>`<button class="step ${index===i?'current':complete[i]?'complete':''}" data-action="navigate" data-page="${['library','facts','check','history'][i]}" aria-label="第${i+1}步：${x}"><i>${complete[i]&&index!==i?'✓':i+1}</i>${x}</button>`).join('')}</nav>`;
 }
 function scopeLine(){return `<div class="scope-line">${icon('info',12)}本地规则检查支持 ${Object.keys(ATTRIBUTES).length} 类设定；AI 审稿按所选前文进行语义对照。两者均需作者判断，未检出不代表全稿无误。</div>`;}
+function reviewScope(compact=false){
+  return `<section class="review-scope ${compact?'compact':'card'}" aria-label="小说审稿范围">
+    <div class="review-scope-heading">${icon('book',17)}<h3>我们主要审什么？小说前后文一致性。</h3></div>
+    <p>把新章与前文放在一起，找出“设定变了、关系对不上、事情接不起来”的疑点。</p>
+    <div class="review-area-tags">${REVIEW_AREAS.map(a=>pill(a.name,'gray')).join('')}</div>
+    <p><strong>审核依据：</strong>作者确认的设定、旧稿原文，以及本次新章的上下文。</p>
+    <details class="review-scope-details"><summary>展开六类核对示例与能力边界</summary>
+      <div class="review-area-grid">${REVIEW_AREAS.map(a=>`<div><h4>${h(a.name)}</h4><p>${h(a.detail)}</p><p class="review-example">例如：${h(a.example)}</p></div>`).join('')}</div>
+      <p><strong>本地规则检查：</strong>核对已确认的 12 类设定中的有限明确句式，别名用于归并对象。<strong>AI 审稿：</strong>尝试从上述六类方向理解自然语言与语境；需要模型密钥，实际识别效果尚待真实模型验收。</p>
+      <p>回忆、传闻、梦境和已有解释的正常变化需要结合剧情判断。每个疑点均附新旧原文、出处与说明，由作者最终确认。</p>
+      <p>${h(REVIEW_BOUNDARY)}AI 只对比本轮发送的前文片段，当前没有完整的全书时间线推演。</p>
+    </details>
+    <details class="review-scope-details"><summary>审核标准从哪里来？查看判断依据</summary>
+      <p>这是章序公开的产品准则，依据作品自身的设定与叙述判断。作者确认的设定必须保留原文出处，未确认的候选不会成为规则基准。</p>
+      <div class="review-area-grid">
+        <div><h4>1 · 比较相同对象与属性</h4><p>${h(REVIEW_RULE_CRITERIA)}</p><p>确认后的别名用于归并对象；中文数词和同一度量体系的长度会先换算，再比较。</p></div>
+        <div><h4>2 · 核对时间和变化解释</h4><p>AI 提示词要求：${h(REVIEW_AI_CRITERIA)}</p><p>回忆、梦境、传闻、伪装、康复和阵营转变需结合剧情。规则仅识别有限文字线索，AI 也可能误解。</p></div>
+        <div><h4>3 · 附双侧原文，由作者裁定</h4><p>每条疑点附旧稿原文、新章原文、出处和原因。AI 引文须逐字存在且能唯一定位，无法通过校验的返回会剔除。</p><p>引文存在只证明有出处，不代表判断正确。作者可标记确有错误、正常变化或误报。</p></div>
+      </div>
+      <p><strong>举个例子：</strong>旧稿“他的双眼已经失明”，新章“他看清了远处的旗号”。AI 应先找康复、特殊能力或叙述时间的解释；有明确解释应跳过，解释缺失才作为疑点。这里只说明准则，尚非真实模型验收案例。</p>
+      <p><strong>当前限制：</strong>规则以最近收录章节中的已确认设定为基准，尚未自动推演故事时间；AI 只读本轮发送的材料，片段未提及不等于事情没有发生。没有引用外部行业审稿规范，也尚未经过真实作者样稿的误报、漏检评估。</p>
+    </details>
+  </section>`;
+}
 function importCard(){
   return `<section class="card"><div class="card-pad"><div class="row between"><h3>导入已有稿件</h3><span class="split-note">旧稿只需导入一次</span></div>
     <div class="upload-box" id="upload-drop" role="button" tabindex="0" data-action="choose-manuscript" aria-label="选择 TXT、Markdown 或 DOCX 文件"><div class="upload-icon">${icon('upload',26)}</div><strong>选择文件，或将文件拖到这里</strong><span>TXT / Markdown / DOCX · 单个文件不超过 8 MB</span></div>
@@ -157,7 +192,7 @@ function renderFacts(){
 function empty(i,title,desc,label='',action='',extra=''){return `<div class="card empty">${icon(i,32)}<h3>${h(title)}</h3><p>${h(desc)}</p>${label?btn(label,action,'primary',extra):''}</div>`;}
 function renderCheck(){
   const p=state.project,s=currentSession(),confirmed=activeFacts(p.facts,nextIndex(p),confirmedAliases(p)).size;
-  let html=pageHead('ONE MORE CHAPTER','小章来帮你翻翻前文。','先用本地规则快速核对，再让 AI 帮你留意不同措辞、隐含关系与事件衔接。')+steps(2);
+  let html=pageHead('ONE MORE CHAPTER','小章来帮你翻翻前文。','小说前后文一致性审稿：核对人物、关系、物品、数值与事件衔接，每个疑点都有原文依据。')+steps(2)+reviewScope();
   if(!p.chapters.length)return html+empty('pages','先放入一些前文','导入旧稿后，可选择本地规则核对或 AI 语义审稿。','导入旧稿','navigate','data-page="library"');
   html+=`<div class="check-layout"><section class="card"><div class="editor-title row between"><span>待检查的新章</span><span class="budget-count">${confirmed} 条生效设定</span></div><div class="editor-body"><label for="draft-title" class="visually-hidden">新章标题</label><input id="draft-title" type="text" maxlength="120" placeholder="例如：第${nextIndex(p)}章 雨夜来客" value="${h(p.draftTitle)}"><label for="draft-text" class="visually-hidden">新章正文</label><textarea class="draft-text serif" id="draft-text" placeholder="在这里粘贴刚写好的新章节…">${h(p.draftText)}</textarea><div class="row between mt16"><span id="draft-count" class="small muted">${fmt(p.draftText.length)} 字符</span><button class="source-link" data-action="choose-draft">${icon('upload',12)} 从文件读入</button><input type="file" id="draft-file" class="visually-hidden" accept=".txt,.md,.docx" tabindex="-1"></div></div><div class="editor-footer"><span class="small muted">${state.busy?h(state.busyLabel):'规则免费 · AI 按供应商用量计费'}</span><div class="row gap8 wrap">${aiAbort?btn('停止等待','cancel-ai','sm'):btn('本地规则检查','run-check','sm',state.busy||!confirmed?'disabled':'')}${btn(icon('spark',14)+' AI 语义审稿','open-ai','primary',state.busy?'disabled':'')}</div></div></section><section id="results-column">${s?renderResults(s):`<div class="check-empty">${icon('check',39)}<div class="serif">每一个差异，都有出处。</div><p>点击检查后，已确认的旧设定与新章原文<br>会并排显示在这里，供你逐条判断。</p><div style="margin-top:20px">${pill('明确事实核对')}${pill('不自动改写正文','gray')}</div></div><div class="side-note"><h3>检查结果由什么构成？</h3><div class="note-line">${icon('alert',14)}<span>明确属性不同：优先核对是否写错。</span></div><div class="note-line">${icon('info',14)}<span>回忆、对话、阵营变化或年龄变化：保留为人工判断提示。</span></div></div>`}</section></div>`;
   return html+scopeLine();
@@ -202,7 +237,7 @@ function manualFact(existing=null,chapter=null,quote=''){
   modal(existing?'编辑候选设定':'补充一条有原文依据的设定',`<p class="muted small">只补充原文明示的设定。新章会按本版支持的表达方式核对对应属性。</p><div class="field-row"><div><label for="manual-entity">人物 / 对象名称</label><input id="manual-entity" type="text" maxlength="20" value="${h(existing?.entity||'')}" placeholder="例如：陆沉"></div><div><label for="manual-attribute">属性</label><select id="manual-attribute">${Object.entries(ATTRIBUTES).map(([k,v])=>`<option value="${k}" ${existing?.attribute===k?'selected':''}>${h(v.label)}</option>`).join('')}</select></div></div><label for="manual-value">设定值</label><input id="manual-value" type="text" maxlength="32" value="${h(existing?.value||'')}" placeholder="例如：左手"><label for="manual-chapter">原文章节</label><select id="manual-chapter">${p.chapters.map(c=>`<option value="${h(c.id)}" ${selected?.id===c.id?'selected':''}>${h(c.title)}</option>`).join('')}</select><label for="manual-quote">原文证据（逐字引用）</label><textarea id="manual-quote" rows="3" maxlength="800" placeholder="粘贴一句包含对象名称和设定值的原文">${h(existing?.evidence.quote||quote)}</textarea><div class="field-note">引用必须在所选章节中找到，且包含对象名称（或已确认别名）与设定值；相同引文重复出现时定位到第一次。</div>`,btn('取消','close-modal','sm')+btn('保存为待确认','save-manual-fact','primary sm'));
 }
 function about(){
-  modal('检查范围与稿件存储',`<div class="notice">本版提供本地规则检查和可选的 DeepSeek AI 语义审稿。AI 疑点通过双侧引文校验后显示，仍可能误判或漏检；尚未经过真实作者准确率验证。</div><h3 class="mt24">哪些表述会进入检查？</h3><table class="support-table"><thead><tr><th>设定</th><th>支持的表达示例</th></tr></thead><tbody><tr><td>惯用手、瞳色、血型</td><td>陆沉惯用左手。陆沉的瞳色是黑色。</td></tr><tr><td>生父、生母、出生地</td><td>顾宁的生父是顾远山。</td></tr><tr><td>年龄</td><td>陆沉年方二十岁。陆沉的年龄是20岁。</td></tr><tr><td>阵营、生死状态</td><td>陆沉效忠北境军。沈砚已经战死。</td></tr><tr><td>固定编制、长度</td><td>银鸦卫的固定编制为三百人。</td></tr><tr><td>别名</td><td>陆沉的别名是青鸦。确认后与陆沉合并核对。</td></tr></tbody></table><p class="small muted">共 ${Object.keys(ATTRIBUTES).length} 类设定，其中别名用于统一对象。数字支持常见中文数词；长度仅在同一度量体系内换算。阵营、年龄、生死状态不同均保留为人工判断。</p><h3 class="mt24">哪些还做不到？</h3><p class="small muted">无法理解所有自然语言写法、代词指向、隐含因果、完整历史知识或故事时间线。未发现差异，表示在本轮识别到的表述里没有差异。回忆、对话、伪装等标记也可能漏识别，作者需要继续审稿。</p><h3 class="mt24">如何保留下一章的判断？</h3><p class="small muted">每条差异可标记“确有错误”“正常变化”或“误报 / 不适用”。相同章节标题、原文语境和原设定再次检查时恢复判断；改写内容后重新检查。收录新章后，新设定仍要到设定页确认。</p><h3 class="mt24">稿件存在哪里？</h3><p class="small muted">导入、规则提取与规则检查在浏览器内完成。只有在 AI 审稿窗口确认发送后，新章、所选前文、相关已确认设定与别名才会经章序服务转发给 DeepSeek。发送内容可在窗口展开查看；服务器代码不持久化正文或密钥，也不记录请求正文。供应商的数据处理以其政策为准。API Key 只保留在当前标签页内存中，刷新即清除，不写入作品备份。正文、设定和检查记录写入当前浏览器的本地数据库；同一站点、同一浏览器资料中的作品可访问，不等于加密保险箱。换设备、清理站点数据、浏览器私密模式或更换网址都可能导致数据不可用。请定期导出 JSON 备份，恢复时会检查引用。</p><p class="small muted mt16">TXT 支持 UTF-8 及 GB18030；DOCX 读取可编辑正文，不含图片文字、批注、页眉页脚或完整排版。单文件 8 MB，单次导入 150 万字符，单部作品正文 300 万字符；单次新章 10 万字符。AI 单次新章最多 12,000 字符、前文最多 24,000 字符，超出部分不覆盖。当前无账号云同步、平台收费或自动全书审稿；DeepSeek 按其用量计费。</p>`,btn('知道了','close-modal','primary sm'),true);
+  modal('检查范围与稿件存储',`<div class="notice">本版提供本地规则检查和可选的 DeepSeek AI 语义审稿。AI 疑点通过双侧引文校验后显示，仍可能误判或漏检；尚未经过真实作者准确率验证。</div>${reviewScope(true)}<h3 class="mt24">本地规则具体支持哪些表述？</h3><table class="support-table"><thead><tr><th>设定</th><th>支持的表达示例</th></tr></thead><tbody><tr><td>惯用手、瞳色、血型</td><td>陆沉惯用左手。陆沉的瞳色是黑色。</td></tr><tr><td>生父、生母、出生地</td><td>顾宁的生父是顾远山。</td></tr><tr><td>年龄</td><td>陆沉年方二十岁。陆沉的年龄是20岁。</td></tr><tr><td>阵营、生死状态</td><td>陆沉效忠北境军。沈砚已经战死。</td></tr><tr><td>固定编制、长度</td><td>银鸦卫的固定编制为三百人。</td></tr><tr><td>别名</td><td>陆沉的别名是青鸦。确认后与陆沉合并核对。</td></tr></tbody></table><p class="small muted">共 ${Object.keys(ATTRIBUTES).length} 类设定，其中别名用于统一对象。数字支持常见中文数词；长度仅在同一度量体系内换算。阵营、年龄、生死状态不同均保留为人工判断。</p><h3 class="mt24">哪些还做不到？</h3><p class="small muted">无法理解所有自然语言写法、代词指向、隐含因果、完整历史知识或故事时间线。未发现差异，表示在本轮识别到的表述里没有差异。回忆、对话、伪装等标记也可能漏识别，作者需要继续审稿。</p><h3 class="mt24">如何保留下一章的判断？</h3><p class="small muted">每条差异可标记“确有错误”“正常变化”或“误报 / 不适用”。相同章节标题、原文语境和原设定再次检查时恢复判断；改写内容后重新检查。收录新章后，新设定仍要到设定页确认。</p><h3 class="mt24">稿件存在哪里？</h3><p class="small muted">导入、规则提取与规则检查在浏览器内完成。只有在 AI 审稿窗口确认发送后，新章、所选前文、相关已确认设定与别名才会经章序服务转发给 DeepSeek。发送内容可在窗口展开查看；服务器代码不持久化正文或密钥，也不记录请求正文。供应商的数据处理以其政策为准。API Key 只保留在当前标签页内存中，刷新即清除，不写入作品备份。正文、设定和检查记录写入当前浏览器的本地数据库；同一站点、同一浏览器资料中的作品可访问，不等于加密保险箱。换设备、清理站点数据、浏览器私密模式或更换网址都可能导致数据不可用。请定期导出 JSON 备份，恢复时会检查引用。</p><p class="small muted mt16">TXT 支持 UTF-8 及 GB18030；DOCX 读取可编辑正文，不含图片文字、批注、页眉页脚或完整排版。单文件 8 MB，单次导入 150 万字符，单部作品正文 300 万字符；单次新章 10 万字符。AI 单次新章最多 12,000 字符、前文最多 24,000 字符，超出部分不覆盖。当前无账号云同步、平台收费或自动全书审稿；DeepSeek 按其用量计费。</p>`,btn('知道了','close-modal','primary sm'),true);
 }
 
 async function importText(text,name){
@@ -246,7 +281,7 @@ async function runCheck(){
 }
 function renderAIMeta(s){
   const a=s.ai,c=a.coverage,u=a.usage;
-  return `<div class="result-summary">${pill('AI 语义审稿','ai-pill')}${pill(a.model,'gray')}</div><p>前文覆盖 ${fmt(c.selectedChars)} / ${fmt(c.totalChars)} 字符（${c.selectedChapters} / ${c.totalChapters} 章）。${c.fullBook?'本轮前文已全部发送。':'本轮仅检索片段，未覆盖整部旧稿。'} AI 疑点需作者核对。</p><p class="small muted">本轮输入 ${u.inputTokens===null?'供应商未返回':fmt(u.inputTokens)} token · 输出 ${u.outputTokens===null?'供应商未返回':fmt(u.outputTokens)} token。费用以 DeepSeek 账单为准。</p>${a.rejected?`<div class="notice warn mt16">${a.rejected} 项返回内容未通过引文或格式校验，已剔除。本轮结果不完整；请人工复查相关内容。</div>`:''}`;
+  return `<div class="result-summary">${pill('AI 语义审稿','ai-pill')}${pill(a.model,'gray')}</div><p>本轮关注${REVIEW_AREAS.map(a=>a.name).join('、')}。</p><p>前文覆盖 ${fmt(c.selectedChars)} / ${fmt(c.totalChars)} 字符（${c.selectedChapters} / ${c.totalChapters} 章）。${c.fullBook?'本轮前文已全部发送。':'本轮仅检索片段，未覆盖整部旧稿。'} AI 疑点需作者核对。</p><p class="small muted">本轮输入 ${u.inputTokens===null?'供应商未返回':fmt(u.inputTokens)} token · 输出 ${u.outputTokens===null?'供应商未返回':fmt(u.outputTokens)} token。费用以 DeepSeek 账单为准。</p>${a.rejected?`<div class="notice warn mt16">${a.rejected} 项返回内容未通过引文或格式校验，已剔除。本轮结果不完整；请人工复查相关内容。</div>`:''}`;
 }
 async function openAIDialog(){
   const p=state.project;
@@ -260,7 +295,7 @@ async function openAIDialog(){
   catch{throw new Error('AI 服务未启动或版本不匹配。请用 npm start 运行完整工作台；纯静态部署只支持本地规则检查。');}
   aiPending={context,chapter,projectId:p.id,canonSignature:canonSignature(p),serverKeyAvailable:config.serverKeyAvailable};
   const c=context.coverage;
-  modal('让小章再读深一点',`<div class="ai-dialog-intro">${bookBuddySvg('check')}<div><h3>AI 语义审稿</h3><p>留意能力、身份、物品与事件衔接中的矛盾。每条疑点都需要新旧原文证据，并由你判断。</p></div></div><div class="ai-scope"><strong>本轮发送范围</strong><p>新章 ${fmt(chapter.text.length)} 字符；前文 ${fmt(c.selectedChars)} / ${fmt(c.totalChars)} 字符，来自 ${c.selectedChapters} / ${c.totalChapters} 章；另含 ${context.canon.length} 条相关已确认设定与作者确认的别名。</p><p>${c.fullBook?'这部作品的前文在本轮容量内。':'前文超出容量，仅发送检索片段。未选片段中的矛盾可能漏检。'}</p></div><details class="ai-preview"><summary>查看将发送的原文与设定</summary><h4>${h(chapter.title)} · 新章</h4><pre>${h(chapter.text)}</pre>${context.excerpts.map(e=>`<h4>${h(e.title)} · 字符 ${e.start+1}—${e.start+e.text.length}</h4><pre>${h(e.text)}</pre>`).join('')}<h4>确认设定与别名</h4><pre>${h(context.canon.map(f=>`${f.entity} / ${f.attribute}：${f.value}\n原文：${f.quote}`).join('\n\n')+'\n\n'+Object.entries(context.aliases).filter(([,names])=>names.length).map(([name,names])=>`${name}的别名：${names.join('、')}`).join('\n'))}</pre></details><div class="field-row"><div><label for="ai-model">审稿模型</label><select id="ai-model">${Object.entries(AI_MODELS).map(([id,name])=>`<option value="${id}" ${id===aiModel?'selected':''}>${name}</option>`).join('')}</select></div><div><label for="ai-key">DeepSeek API Key</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" maxlength="256" placeholder="${config.serverKeyAvailable?'可留空：使用服务器密钥':'仅在此标签页内存保留'}"></div></div><p class="field-note">密钥经当前服务器转发给 DeepSeek 官方接口，不写入作品、备份或浏览器持久存储。刷新即清除。${btn('清除本页密钥','clear-ai-key','text small')}</p><div class="notice mt16">每次确认发起 1 次模型请求，输出最多 ${AI_LIMITS.outputTokens} token，不自动付费重试。费用由 DeepSeek 按用量收取；可到 <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">DeepSeek 平台</a>管理密钥与余额。</div><label class="ai-consent" for="ai-consent"><input id="ai-consent" type="checkbox"><span>我确认将上述稿件内容发送给 DeepSeek，并了解本次调用可能产生费用。AI 结果由我逐条核对。</span></label>`,btn('先不发送','close-modal','sm')+btn(icon('spark',14)+' 发送并开始审稿','confirm-ai','primary sm'),true);
+  modal('让小章再读深一点',`<div class="ai-dialog-intro">${bookBuddySvg('check')}<div><h3>AI 语义审稿</h3><p>小说前后文一致性审稿。每条疑点附新旧原文，由你最终判断。</p></div></div>${reviewScope(true)}<div class="ai-scope"><strong>本轮发送范围</strong><p>新章 ${fmt(chapter.text.length)} 字符；前文 ${fmt(c.selectedChars)} / ${fmt(c.totalChars)} 字符，来自 ${c.selectedChapters} / ${c.totalChapters} 章；另含 ${context.canon.length} 条相关已确认设定与作者确认的别名。</p><p>${c.fullBook?'这部作品的前文在本轮容量内。':'前文超出容量，仅发送检索片段。未选片段中的矛盾可能漏检。'}</p></div><details class="ai-preview"><summary>查看将发送的原文与设定</summary><h4>${h(chapter.title)} · 新章</h4><pre>${h(chapter.text)}</pre>${context.excerpts.map(e=>`<h4>${h(e.title)} · 字符 ${e.start+1}—${e.start+e.text.length}</h4><pre>${h(e.text)}</pre>`).join('')}<h4>确认设定与别名</h4><pre>${h(context.canon.map(f=>`${f.entity} / ${f.attribute}：${f.value}\n原文：${f.quote}`).join('\n\n')+'\n\n'+Object.entries(context.aliases).filter(([,names])=>names.length).map(([name,names])=>`${name}的别名：${names.join('、')}`).join('\n'))}</pre></details><div class="field-row"><div><label for="ai-model">审稿模型</label><select id="ai-model">${Object.entries(AI_MODELS).map(([id,name])=>`<option value="${id}" ${id===aiModel?'selected':''}>${name}</option>`).join('')}</select></div><div><label for="ai-key">DeepSeek API Key</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" maxlength="256" placeholder="${config.serverKeyAvailable?'可留空：使用服务器密钥':'仅在此标签页内存保留'}"></div></div><p class="field-note">密钥经当前服务器转发给 DeepSeek 官方接口，不写入作品、备份或浏览器持久存储。刷新即清除。${btn('清除本页密钥','clear-ai-key','text small')}</p><div class="notice mt16">每次确认发起 1 次模型请求，输出最多 ${AI_LIMITS.outputTokens} token，不自动付费重试。费用由 DeepSeek 按用量收取；可到 <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">DeepSeek 平台</a>管理密钥与余额。</div><label class="ai-consent" for="ai-consent"><input id="ai-consent" type="checkbox"><span>我确认将上述稿件内容发送给 DeepSeek，并了解本次调用可能产生费用。AI 结果由我逐条核对。</span></label>`,btn('先不发送','close-modal','sm')+btn(icon('spark',14)+' 发送并开始审稿','confirm-ai','primary sm'),true);
   $('#ai-key').value=aiKey;
 }
 async function runAIReview(pending,key,model){
@@ -290,7 +325,7 @@ function report(sessionId){
   const p=state.project,s=p.sessions.find(s=>s.id===sessionId);if(!s)return;
   const statuses={pending:'未处理',error:'确有错误',change:'正常变化',ignore:'误报 / 不适用'};
   const coverage=s.ai?.coverage,usage=s.ai?.usage;
-  let lines=[`# ${p.name} · 检查报告`,``,`- 章节：${s.chapter.title}`,`- 检查时间（北京时间）：${new Date(s.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}`,
+  let lines=[`# ${p.name} · 检查报告`,``,`- 审稿目标：小说前后文一致性核对。`,`- 本轮关注：${s.ai?REVIEW_AREAS.map(a=>a.name).join('、'):'已确认设定中的惯用手、瞳色、血型、生父、生母、出生地、年龄、阵营、生死状态、固定编制、长度；别名用于归并对象。'}`,`- 审核依据：${s.ai?'本轮选取的旧稿片段、相关已确认设定及别名、本次新章。':'附原文的已确认设定及别名、本次新章中可识别的表述。'}`,`- 判断原则：${s.ai?'AI 提示词要求：'+REVIEW_AI_CRITERIA:REVIEW_RULE_CRITERIA}`,`- 证据要求：每条疑点附双侧原文和出处；引文存在不代表判断正确，由作者裁定。`,`- 范围边界：${REVIEW_BOUNDARY}`,`- 章节：${s.chapter.title}`,`- 检查时间（北京时间）：${new Date(s.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}`,
     ...(s.ai?[`- AI 语义审稿：${s.ai.provider} / ${s.ai.model} / ${s.version}`,`- 前文覆盖：${coverage.selectedChars} / ${coverage.totalChars} 字符，${coverage.selectedChapters} / ${coverage.totalChapters} 章；${coverage.fullBook?'前文已全部发送':'仅检索片段，未覆盖全书'}`,`- 用量：输入 ${usage.inputTokens??'未返回'} token，输出 ${usage.outputTokens??'未返回'} token；费用以供应商账单为准。`,`- 双侧引文校验后保留 ${s.findings.length} 条 AI 疑点，剔除 ${s.ai.rejected} 项无效或重复返回。`]:[`- 规则引擎：${s.version}`,`- 核对 ${s.checkedClaims} 处可比较表述；明确属性差异 ${s.hardCount} 处，需结合剧情 ${s.reviewCount} 处。`]),``,s.ai?'AI 只对比本轮发送的材料；可能误判或漏检，未发现疑点不代表全稿无误。':'本报告仅覆盖可识别的明确表述；未检出差异不代表全稿无误。',`每条差异由作者判断，不自动改写原稿。`,``];
   for(const [i,f] of s.findings.entries()) {
     const old=p.chapters.find(c=>c.id===f.previousEvidence.chapterId);
