@@ -114,7 +114,7 @@ function render() {
     </div></div>`;
 }
 function pageHead(eyebrow,title,description,actions='') {
-  return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div><div class="heading-extra">${actions?`<div class="heading-actions row wrap gap8">${actions}</div>`:''}<div class="buddy-stage"><button class="book-buddy" data-action="pet-buddy" aria-label="逗一逗小章，查看使用小提示" title="点点小章，它有话想说">${bookBuddySvg()}</button><div class="buddy-message" role="status" aria-live="polite">${buddyMessage(state.page)}</div></div></div></div>`;
+  return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div><div class="heading-extra">${actions?`<div class="heading-actions row wrap gap8">${actions}</div>`:''}<div class="buddy-stage"><button class="book-buddy" data-action="pet-buddy" aria-label="摸摸小章" title="点点小章，收下一点小开心">${bookBuddySvg()}</button><div class="buddy-message" role="status" aria-live="polite" aria-atomic="true">${buddyMessage(state.page)}</div><span class="buddy-name">小章 · 你的书桌搭子</span><div class="buddy-actions" role="group" aria-label="和小章互动"><button class="buddy-gesture" data-action="pet-buddy" data-gesture="pet">摸摸头</button><button class="buddy-gesture" data-action="pet-buddy" data-gesture="snack">喂灵感</button><button class="buddy-gesture" data-action="pet-buddy" data-gesture="highfive">击个掌</button></div></div></div></div>`;
 }
 function steps(index) {
   const p=state.project,complete=[p.chapters.length>0,p.facts.some(f=>f.status==='confirmed'),p.sessions.length>0];
@@ -365,7 +365,7 @@ async function handleAction(button){
   if(a==='navigate'){state.page=button.dataset.page;state.query='';render();window.scrollTo(0,0);return;}
   if(a==='close-modal'){closeModal();return;}
   if(a==='about'){about();return;}
-  if(a==='pet-buddy'){petBuddy(state.page);return;}
+  if(a==='pet-buddy'){petBuddy(state.page,button.dataset.gesture);return;}
   if(a==='choose-manuscript'){$('#manuscript-file')?.click();return;}
   if(a==='choose-draft'){$('#draft-file')?.click();return;}
   if(a==='import-text'){await busy('正在提取设定',()=>importText(state.importText,'粘贴旧稿'));return;}
