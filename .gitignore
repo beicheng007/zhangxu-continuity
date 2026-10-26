@@ -1,0 +1,13 @@
+node_modules/
+*.tar.gz
+*.zip
+.DS_Store
+.openai/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.db
+*.backup.json
+.local/
